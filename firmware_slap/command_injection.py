@@ -1,18 +1,17 @@
 import angr
 import string
 import claripy
-import IPython
 
 
 class SystemLibc(angr.procedures.libc.system.system):
     def check_exploitable(self, cmd):
-
         # cmd is a pointer to a string
         value = self.state.memory.load(cmd)
 
         # We can't interact with raw bitvectors as potential system candidates
-        if 'claripy.ast.bv.BV' in str(type(cmd)):
+        if isinstance(cmd, claripy.ast.bv.BV):
             return False
+
         clarip = cmd.to_claripy()
         location = self.state.solver.eval(clarip)
         value_length = int("0x" + str(value.length), 16)
@@ -28,15 +27,14 @@ class SystemLibc(angr.procedures.libc.system.system):
         prev_item = symbolic_list[0]
         for i in range(1, len(symbolic_list)):
             if symbolic_list[i] and symbolic_list[i] == symbolic_list[i - 1]:
-                count = count + 1
-                if (count > greatest_count):
+                count += 1
+                if count > greatest_count:
                     greatest_count = count
                     position = i - count
             else:
-                if (count > greatest_count):
+                if count > greatest_count:
                     greatest_count = count
                     position = i - 1 - count
-                    # previous position minus greatest count
                 count = 0
 
         if greatest_count >= len("`reboot`"):
@@ -51,7 +49,6 @@ class SystemLibc(angr.procedures.libc.system.system):
                 self.state.globals['cmd'] = "`reboot`"
                 self.state.globals['val_addr'] = location
                 self.state.globals['val_offset'] = location + position
-#                self.state.globals['val_str'] = val_str
         elif greatest_count >= len("`ls`"):
             val_loc = self.state.memory.load(location + position, len("`ls`"))
             if self.state.satisfiable(extra_constraints=[val_loc == "`ls`"]):
@@ -63,15 +60,10 @@ class SystemLibc(angr.procedures.libc.system.system):
                 self.state.globals['val_addr'] = location
                 self.state.globals['val_offset'] = location + position
 
-
-#                self.state.globals['val_str'] = val_str
-
     def check_for_constraint(self):
         actions = [x for x in self.state.history.actions]
         for action in actions:
-            if type(
-                    action
-            ) == angr.state_plugins.sim_action.SimActionData and action.actual_value is not None:
+            if isinstance(action, angr.state_plugins.sim_action.SimActionData) and action.actual_value is not None:
                 value_str = self.state.se.eval(action.actual_value,
                                                cast_to=bytes).decode(
                                                    'utf-8', 'ignore')

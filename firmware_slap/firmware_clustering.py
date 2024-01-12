@@ -1,13 +1,10 @@
 import magic
-import pickle
 import argparse
-import IPython
 from multiprocessing import Pool
 from tqdm import tqdm
 from firmware_slap.function_clustering import *
 from firmware_slap.function_handler import get_arg_funcs, get_function_information
 import matplotlib.pyplot as plt
-from sklearn.metrics import silhouette_score
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.decomposition import TruncatedSVD
 from sklearn.preprocessing import Normalizer
@@ -18,7 +15,6 @@ import hashlib
 
 
 def get_executable_files(directory, progress=True):
-
     executables = []
     shared_libs = []
     hashes = []
@@ -71,7 +67,6 @@ def md5sum(filename):
 
 
 def get_firmware_sparse(file_list):
-
     all_functions = []
     m_pool = Pool()
 
@@ -79,24 +74,12 @@ def get_firmware_sparse(file_list):
     for i in tqdm(m_pool.imap_unordered(get_sparse_file_data, file_list),
                   total=len(file_list)):
         all_functions.extend(i)
-    '''
-    for file_item in file_list:
-
-        info = get_function_information(file_item)
-        #arg_info = get_arg_funcs(file_item)
-        #trimmed = trim_funcs(arg_info)
-        trimmed = trim_funcs(info)
-        all_functions.extend(trimmed)
-    '''
 
     return all_functions
 
 
 def get_sparse_file_data(file_name):
-
     info = get_function_information(file_name)
-    #arg_info = get_arg_funcs(file_item)
-    #trimmed = trim_funcs(arg_info)
     if info:
         trimmed = trim_funcs(info, file_name=file_name)
     else:
@@ -110,11 +93,6 @@ def plot_clustering(all_functions, plot_it=False):
     transformer = Normalizer().fit(func_sparse)
 
     func_sparse = transformer.transform(func_sparse)
-
-    #svd = TruncatedSVD(random_state=2)
-    #svd = TruncatedSVD(n_components=5, n_iter=7, random_state=42)
-
-    #func_sparse = svd.fit_transform(func_sparse)
 
     scores = []
     clust_count = []
@@ -131,7 +109,7 @@ def plot_clustering(all_functions, plot_it=False):
         clust_count.append(x)
         labels.append(result.labels_)
 
-        print("Clusters {:<3} | Silhoette Score : {}".format(x, score))
+        print("Clusters {:<3} | Silhouette Score : {}".format(x, score))
 
     largest_dif = 200
     large_index = 0
@@ -139,18 +117,14 @@ def plot_clustering(all_functions, plot_it=False):
         if largest_dif > scores[x]:
             largest_dif = scores[x]
             large_index = x
-        '''
-        if largest_dif < abs(scores[x] - scores[x+1]):
-                largest_dif = abs(scores[x] - scores[x+1])
-                large_index = x+1
-        '''
+
     print("Largest drop at {} with {}".format(clust_count[large_index],
                                               largest_dif))
 
     if plot_it:
         plt.plot(clust_count, scores)
         plt.xlabel("Cluster Centroid Count")
-        plt.ylabel("Silhoette Score")
+        plt.ylabel("Silhouette Score")
         plt.grid = True
         plt.show()
 
@@ -164,11 +138,6 @@ def single_cluster(all_functions, centroid_count=2):
 
     func_sparse = transformer.transform(func_sparse)
 
-    # svd = TruncatedSVD(random_state=2)
-    # svd = TruncatedSVD(n_components=5, n_iter=7, random_state=42)
-
-    # func_sparse = svd.fit_transform(func_sparse)
-
     labels = []
 
     result = KMeans(n_clusters=centroid_count, random_state=2).fit(func_sparse)
@@ -180,7 +149,7 @@ def single_cluster(all_functions, centroid_count=2):
                              sample_size=5000)
     labels.append(result.labels_)
 
-    print("Clusters {:<3} | Silhoette Score : {}".format(
+    print("Clusters {:<3} | Silhouette Score : {}".format(
         centroid_count, score))
 
     return result.labels_
@@ -205,11 +174,6 @@ def get_single_cluster(all_functions, centroid_count=2):
 
     func_sparse = transformer.transform(func_sparse)
 
-    # svd = TruncatedSVD(random_state=2)
-    # svd = TruncatedSVD(n_components=5, n_iter=7, random_state=42)
-
-    # func_sparse = svd.fit_transform(func_sparse)
-
     labels = []
 
     result = KMeans(n_clusters=centroid_count, random_state=2).fit(func_sparse)
@@ -221,7 +185,6 @@ def get_single_cluster(all_functions, centroid_count=2):
                              sample_size=5000)
     labels.append(result.labels_)
 
-    #print("Clusters {:<3} | Silhoette Score : {}".format(centroid_count, score))
     return_dict['count'] = centroid_count
     return_dict['score'] = score
     return_dict['labels'] = result.labels_
@@ -230,13 +193,12 @@ def get_single_cluster(all_functions, centroid_count=2):
 
 
 def remove_non_needed_functions(all_functions, remove_features=True):
-
     bad_prefix = ["fcn.", "sub.", "loc.", "aav.", "sym._fini", "sym._init"]
 
-    keep_functions = []
-    for function in all_functions:
-        if not any(prefix in function['name'] for prefix in bad_prefix):
-            keep_functions.append(function)
+    keep_functions = [
+        function for function in all_functions
+        if not any(prefix in function['name'] for prefix in bad_prefix)
+    ]
 
     if remove_features:
         bad_features = [
@@ -244,10 +206,7 @@ def remove_non_needed_functions(all_functions, remove_features=True):
         ]
         for function in keep_functions:
             for feat in bad_features:
-                try:
-                    function.pop(feat)
-                except:
-                    pass
+                function.pop(feat, None)
 
     return keep_functions
 
@@ -275,11 +234,9 @@ def test():
             with open(args.Dump, 'wb') as f:
                 pickle.dump(all_functions, f, -1)
 
-    #Fix symbols 'n stuff
-    bad_prefix = ["fcn.", "sub.", "loc.", "aav.", "sym._fini", "sym._init"]
     all_functions = [
-        x for x in all_functions
-        if not any([y in x['name'] for y in bad_prefix])
+        function for function in all_functions
+        if not any([prefix in function['name'] for prefix in bad_prefix])
     ]
 
     bad_features = [
@@ -287,14 +244,13 @@ def test():
     ]
     for func in all_functions:
         for feat in bad_features:
-            func.pop(feat)
+            func.pop(feat, None)
 
     func_labels = plot_clustering(all_functions, True)
 
-    file_names = [x['file_name'] for x in all_functions]
+    file_names = [os.path.basename(x['file_name']) for x in all_functions]
     func_names = [x['name'] for x in all_functions]
     for x, y, z in zip(file_names, func_names, func_labels):
-        x = x.split('/')[-1]
         print("{} | {} | {}".format(x, y, z))
 
     IPython.embed()
